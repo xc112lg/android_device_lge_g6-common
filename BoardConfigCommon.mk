@@ -44,7 +44,7 @@ BOARD_USERDATAIMAGE_PARTITION_SIZE := 23026728960
 TARGET_BOARD_INFO_FILE := $(DEVICE_COMMON_PATH)/board-info.txt
 
 # SELinux policies
-BOARD_SEPOLICY_DIRS += $(DEVICE_COMMON_PATH)/sepolicy
+BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_COMMON_PATH)/sepolicy/vendor
 
 # inherit from the proprietary version
 include vendor/lge/g6-common/BoardConfigVendor.mk
