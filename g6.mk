@@ -23,7 +23,7 @@ $(call inherit-product, device/lge/msm8996-common/msm8996.mk)
 
 # Overlay
 DEVICE_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay
-DEVICE_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay-lineage
+DEVICE_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay-evolution
 
 # Properties
 -include $(LOCAL_PATH)/vendor_prop.mk
