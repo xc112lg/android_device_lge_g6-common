@@ -23,6 +23,7 @@
 #include "BiometricsFingerprint.h"
 
 #include <inttypes.h>
+#include <string.h>
 #include <unistd.h>
 
 namespace android {
@@ -37,6 +38,27 @@ static const uint16_t kVersion = HARDWARE_MODULE_API_VERSION(2, 1);
 
 using RequestStatus =
         android::hardware::biometrics::fingerprint::V2_1::RequestStatus;
+
+// mDevice can be null if openHal() failed (missing/incompatible vendor blob,
+// version mismatch, sepolicy denial, etc). Every HIDL entrypoint below used
+// to dereference mDevice unconditionally, which segfaults
+// (SIGSEGV @ null + offsetof(set_active_group)) the first time any client
+// calls in, instead of failing cleanly. Guard against that here.
+#define CHECK_DEVICE_RS() \
+    do { \
+        if (mDevice == nullptr) { \
+            ALOGE("%s: fingerprint device not open", __func__); \
+            return RequestStatus::SYS_UNKNOWN; \
+        } \
+    } while (0)
+
+#define CHECK_DEVICE_U64() \
+    do { \
+        if (mDevice == nullptr) { \
+            ALOGE("%s: fingerprint device not open", __func__); \
+            return 0; \
+        } \
+    } while (0)
 
 BiometricsFingerprint *BiometricsFingerprint::sInstance = nullptr;
 
@@ -151,42 +173,52 @@ Return<uint64_t> BiometricsFingerprint::setNotify(
     // unique token for its driver. Subsequent versions should send a unique
     // token for each call to setNotify(). This is fine as long as there's only
     // one fingerprint device on the platform.
+    // mDevice may legitimately be null here if openHal() failed - callers
+    // just get devId 0, which is safe (no crash).
     return reinterpret_cast<uint64_t>(mDevice);
 }
 
 Return<uint64_t> BiometricsFingerprint::preEnroll()  {
+    CHECK_DEVICE_U64();
     return mDevice->pre_enroll(mDevice);
 }
 
 Return<RequestStatus> BiometricsFingerprint::enroll(const hidl_array<uint8_t, 69>& hat,
         uint32_t gid, uint32_t timeoutSec) {
+    CHECK_DEVICE_RS();
     const hw_auth_token_t* authToken =
         reinterpret_cast<const hw_auth_token_t*>(hat.data());
     return ErrorFilter(mDevice->enroll(mDevice, authToken, gid, timeoutSec));
 }
 
 Return<RequestStatus> BiometricsFingerprint::postEnroll() {
+    CHECK_DEVICE_RS();
     return ErrorFilter(mDevice->post_enroll(mDevice));
 }
 
 Return<uint64_t> BiometricsFingerprint::getAuthenticatorId() {
+    CHECK_DEVICE_U64();
     return mDevice->get_authenticator_id(mDevice);
 }
 
 Return<RequestStatus> BiometricsFingerprint::cancel() {
+    CHECK_DEVICE_RS();
     return ErrorFilter(mDevice->cancel(mDevice));
 }
 
 Return<RequestStatus> BiometricsFingerprint::enumerate()  {
+    CHECK_DEVICE_RS();
     return ErrorFilter(mDevice->enumerate(mDevice));
 }
 
 Return<RequestStatus> BiometricsFingerprint::remove(uint32_t gid, uint32_t fid) {
+    CHECK_DEVICE_RS();
     return ErrorFilter(mDevice->remove(mDevice, gid, fid));
 }
 
 Return<RequestStatus> BiometricsFingerprint::setActiveGroup(uint32_t gid,
         const hidl_string& storePath) {
+    CHECK_DEVICE_RS();
     if (storePath.size() >= PATH_MAX || storePath.size() <= 0) {
         ALOGE("Bad path length: %zd", storePath.size());
         return RequestStatus::SYS_EINVAL;
@@ -201,6 +233,7 @@ Return<RequestStatus> BiometricsFingerprint::setActiveGroup(uint32_t gid,
 
 Return<RequestStatus> BiometricsFingerprint::authenticate(uint64_t operationId,
         uint32_t gid) {
+    CHECK_DEVICE_RS();
     return ErrorFilter(mDevice->authenticate(mDevice, operationId, gid));
 }
 
@@ -216,7 +249,14 @@ fingerprint_device_t* BiometricsFingerprint::openHal() {
     const hw_module_t *hw_mdl = nullptr;
     ALOGD("Opening fingerprint hal library...");
     if (0 != (err = hw_get_module(FINGERPRINT_HARDWARE_MODULE_ID, &hw_mdl))) {
-        ALOGE("Can't open fingerprint HW Module, error: %d", err);
+        // err here is a negative errno from dlopen()/dlsym() inside
+        // hw_get_module (see hardware/libhardware/hardware.c) - almost
+        // always the real cause of a null mDevice further down the line.
+        // Common causes: fingerprint.msm8996.so missing/not in
+        // proprietary-files.txt for this build, sepolicy denying
+        // hal_fingerprint_default access to vendor/lib64/hw, or a
+        // dependency of the .so failing to resolve.
+        ALOGE("Can't open fingerprint HW Module, error: %d (%s)", err, strerror(-err));
         return nullptr;
     }
 
@@ -235,13 +275,17 @@ fingerprint_device_t* BiometricsFingerprint::openHal() {
     hw_device_t *device = nullptr;
 
     if (0 != (err = module->common.methods->open(hw_mdl, nullptr, &device))) {
-        ALOGE("Can't open fingerprint methods, error: %d", err);
+        ALOGE("Can't open fingerprint methods, error: %d (%s)", err, strerror(-err));
         return nullptr;
     }
 
     if (kVersion != device->version) {
-        // enforce version on new devices because of HIDL@2.1 translation layer
-        ALOGE("Wrong fp version. Expected %d, got %d", kVersion, device->version);
+        // enforce version on new devices because of HIDL@2.1 translation layer.
+        // fingerprint.msm8996.so here is a stock LG Oreo (8.0.0) blob per
+        // proprietary-files.txt - if this fires, the blob's reported
+        // HARDWARE_MODULE_API_VERSION no longer matches kVersion=2.1 as
+        // built against this tree's <hardware/fingerprint.h>.
+        ALOGE("Wrong fp version. Expected 0x%04x, got 0x%04x", kVersion, device->version);
         return nullptr;
     }
 

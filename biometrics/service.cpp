@@ -30,16 +30,30 @@ using android::hardware::joinRpcThreadpool;
 using android::sp;
 
 int main() {
-    android::sp<IBiometricsFingerprint> bio = BiometricsFingerprint::getInstance();
+    android::sp<BiometricsFingerprint> bio =
+        static_cast<BiometricsFingerprint*>(BiometricsFingerprint::getInstance());
 
     configureRpcThreadpool(1, true /*callerWillJoin*/);
 
-    if (bio != nullptr) {
-        if (::android::OK != bio->registerAsService()) {
-            return 1;
-        }
-    } else {
+    if (bio == nullptr) {
         ALOGE("Can't create instance of BiometricsFingerprint, nullptr");
+        return 1;
+    }
+
+    if (!bio->isDeviceOpen()) {
+        // openHal() already logged the specific reason (see logcat for this
+        // tag). Don't publish a HIDL service backed by a null device - that
+        // just leaves every fingerprint call to fail (or previously,
+        // segfault) instead of the framework correctly reporting the sensor
+        // as unavailable. Exiting here without calling
+        // registerAsService()/joinRpcThreadpool() means init sees this as a
+        // failed service start.
+        ALOGE("Fingerprint HAL device did not open - not registering service");
+        return 1;
+    }
+
+    if (::android::OK != bio->registerAsService()) {
+        return 1;
     }
 
     joinRpcThreadpool();

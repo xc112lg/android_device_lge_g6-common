@@ -6,6 +6,14 @@ service vendor.fps_hal /vendor/bin/hw/android.hardware.biometrics.fingerprint@2.
     user system
     group system input uhid
     writepid /dev/cpuset/system-background/tasks
+    # If the vendor blob fails to open (missing/incompatible .so, sepolicy
+    # denial, version mismatch - see logcat tag
+    # "android.hardware.biometrics.fingerprint@2.1-service"), the binary now
+    # exits(1) instead of registering a broken HIDL service. oneshot stops
+    # init from respawning it in a tight loop for what's normally a
+    # persistent, not transient, failure. To retry manually after fixing the
+    # underlying cause: `adb shell start vendor.fps_hal`.
+    oneshot
 
 on boot
     # Fingerprints

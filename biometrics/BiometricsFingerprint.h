@@ -49,6 +49,11 @@ public:
     // Method to wrap legacy HAL with BiometricsFingerprint class
     static IBiometricsFingerprint* getInstance();
 
+    // True if the underlying legacy HAL device opened successfully.
+    // service.cpp checks this before registerAsService() so a device with
+    // no working fingerprint HAL doesn't publish a broken HIDL service.
+    bool isDeviceOpen() const { return mDevice != nullptr; }
+
     // Methods from ::android::hardware::biometrics::fingerprint::V2_1::IBiometricsFingerprint follow.
     Return<uint64_t> setNotify(const sp<IBiometricsFingerprintClientCallback>& clientCallback) override;
     Return<uint64_t> preEnroll() override;
