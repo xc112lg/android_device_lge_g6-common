@@ -35,6 +35,8 @@ system/lib/libmpbase.so:vendor/lib/libmpbase.so
 vendor/bin/mm-qcamera-app
 vendor/bin/mm-qcamera-daemon
 vendor/lib/hw/camera.msm8996.so
+system/lib/libcamera_client.so:vendor/lib/libcamera_client_vendor.so
+system/lib64/libcamera_client.so:vendor/lib64/libcamera_client_vendor.so
 vendor/lib/libCmcPdaf.so
 vendor/lib/libflash_pmic.so
 vendor/lib/libiris_lc898123f40.so
@@ -154,8 +156,6 @@ vendor/lib64/libmmcamera2_stats_algorithm.so
 vendor/lib64/libmmcamera_dbg.so
 vendor/lib64/libmmcamera_tintless_algo.so
 vendor/lib64/libmmcamera_tintless_bg_pca_algo.so
-vendor/lib64/libsymphony-1.1.4.so
-vendor/lib64/libsymphonypower-1.1.4.so
 
 # Camera - Actuators
 vendor/lib/libactuator_ak7371.so
